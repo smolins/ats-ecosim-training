@@ -1,0 +1,35 @@
+ARG BASE_IMAGE=ats-ecosim-training:base
+FROM ${BASE_IMAGE}
+
+ARG AMANZI_REF=master
+ARG AMANZI_COMMIT=
+ENV AMANZI_SRC_DIR=/home/training/amanzi \
+    AMANZI_PREFIX=/home/training/install \
+    AMANZI_TPLS_DIR=/home/training/install/tpls \
+    LD_LIBRARY_PATH=/home/training/install/tpls/lib:/home/training/install/tpls/SEACAS/lib:/usr/local/lib:/usr/lib \
+    PATH=/home/training/install/tpls/bin:/home/training/install/tools/bin:${PATH}
+
+RUN git clone https://github.com/amanzi/amanzi.git "${AMANZI_SRC_DIR}" \
+    && cd "${AMANZI_SRC_DIR}" \
+    && git fetch origin "${AMANZI_REF}" \
+    && git checkout --detach "${AMANZI_COMMIT:-FETCH_HEAD}" \
+    && git rev-parse HEAD
+
+WORKDIR ${AMANZI_SRC_DIR}
+COPY docker/patches/amanzi-netcdf-no-tests.patch /tmp/amanzi-netcdf-no-tests.patch
+ARG BUILD_JOBS=4
+RUN git apply /tmp/amanzi-netcdf-no-tests.patch \
+    && ./bootstrap.sh --opt --parallel="${BUILD_JOBS}" \
+    --prefix="${AMANZI_PREFIX}" \
+    --tpl-build-dir=/home/training/build/tpls \
+    --tpl-download-dir=/home/training/build/downloads \
+    --tools-install-prefix=/home/training/install/tools \
+    --disable-build_amanzi --disable-build_user_guide \
+    --disable-structured --enable-unstructured \
+    --enable-shared --enable-mesh_mstk --disable-mesh_moab \
+    --enable-hypre --disable-silo --disable-petsc \
+    --disable-geochemistry --disable-superlu \
+    --enable-clm --enable-ecosim \
+    --with-mpi=/usr --with-python=/opt/conda/bin/python \
+    && test -f "${AMANZI_TPLS_DIR}/share/cmake/amanzi-tpl-config.cmake" \
+    && rm -rf /home/training/build

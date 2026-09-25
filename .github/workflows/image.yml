@@ -1,0 +1,98 @@
+name: Build and publish training image
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  revisions:
+    runs-on: ubuntu-latest
+    outputs:
+      amanzi: ${{ steps.refs.outputs.amanzi }}
+      ats: ${{ steps.refs.outputs.ats }}
+    steps:
+      - id: refs
+        shell: bash
+        run: |
+          set -euo pipefail
+          amanzi=$(git ls-remote https://github.com/amanzi/amanzi.git refs/heads/master | awk '{print $1}')
+          ats=$(git ls-remote https://github.com/amanzi/ats.git refs/heads/agraus/ecosim_pk | awk '{print $1}')
+          test -n "$amanzi"
+          test -n "$ats"
+          echo "amanzi=$amanzi" >> "$GITHUB_OUTPUT"
+          echo "ats=$ats" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: revisions
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push architecture image
+        shell: bash
+        env:
+          AMANZI_COMMIT: ${{ needs.revisions.outputs.amanzi }}
+          ATS_COMMIT: ${{ needs.revisions.outputs.ats }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ats-ecosim-training"
+          docker build -f docker/Dockerfile.base -t ats-ecosim-training:base .
+          docker build -f docker/Dockerfile.tpls \
+            --build-arg BASE_IMAGE=ats-ecosim-training:base \
+            --build-arg AMANZI_COMMIT="$AMANZI_COMMIT" \
+            -t ats-ecosim-training:tpls .
+          docker build -f docker/Dockerfile.training \
+            --build-arg TPL_IMAGE=ats-ecosim-training:tpls \
+            --build-arg ATS_COMMIT="$ATS_COMMIT" \
+            --build-arg SOURCE_REPO="https://github.com/${GITHUB_REPOSITORY}" \
+            -t "${image}:sha-${GITHUB_SHA}-${ARCH}" .
+          docker run --rm "${image}:sha-${GITHUB_SHA}-${ARCH}" \
+            bash -lc 'command -v ats && command -v jupyter && command -v opencode'
+          docker run --rm "${image}:sha-${GITHUB_SHA}-${ARCH}" \
+            bash -lc 'cd /opt/ats-ecosim-training/course && python scripts/run_case.py snow_dynamics_albedo_internal --days 1'
+          docker push "${image}:sha-${GITHUB_SHA}-${ARCH}"
+
+  manifest:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish multi-architecture tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ats-ecosim-training"
+          tags=(-t "${image}:sha-${GITHUB_SHA}")
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            tags+=(-t "${image}:${GITHUB_REF_NAME}" -t "${image}:latest")
+          fi
+          docker buildx imagetools create "${tags[@]}" \
+            "${image}:sha-${GITHUB_SHA}-amd64" \
+            "${image}:sha-${GITHUB_SHA}-arm64"
+          docker buildx imagetools inspect "${image}:sha-${GITHUB_SHA}"

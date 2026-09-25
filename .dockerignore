@@ -1,0 +1,10 @@
+.git
+.github
+amanzi/
+ats-short-course/
+ats-demos/
+work/
+**/.ipynb_checkpoints/
+**/__pycache__/
+**/*.pyc
+**/*.demo/

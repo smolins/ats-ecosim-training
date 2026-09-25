@@ -1,0 +1,11 @@
+work/
+amanzi/
+ats-demos/
+ats-short-course/
+build_ATS_generic.sh
+set_dirs_debug.sh
+*.log
+**/.ipynb_checkpoints/
+**/__pycache__/
+**/*.pyc
+**/*.demo/

@@ -1,0 +1,41 @@
+FROM ubuntu:22.04
+
+ARG MINIFORGE_VERSION=25.3.0-3
+ARG JUPYTER_AI_VERSION=3.0.0
+ARG OPENCODE_VERSION=1.18.31
+ENV DEBIAN_FRONTEND=noninteractive \
+    CONDA_DIR=/opt/conda \
+    PATH=/opt/conda/bin:/usr/local/bin:${PATH} \
+    SHELL=/bin/bash
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash ca-certificates curl git wget make g++ gfortran cmake pkg-config \
+    libmpich-dev mpich libblas-dev liblapack-dev liblapacke-dev \
+    libcurl4-openssl-dev libssl-dev zlib1g-dev m4 groff patch rsync \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --gid 1000 training && useradd --uid 1000 --gid 1000 \
+    --create-home --shell /bin/bash training
+
+RUN wget -q "https://github.com/conda-forge/miniforge/releases/download/${MINIFORGE_VERSION}/Miniforge3-${MINIFORGE_VERSION}-Linux-$(uname -m).sh" \
+    -O /tmp/miniforge.sh \
+    && bash /tmp/miniforge.sh -b -p /opt/conda \
+    && rm /tmp/miniforge.sh \
+    && conda install -y -c conda-forge \
+       python=3.11 cmake jupyterlab nodejs numpy scipy pandas matplotlib \
+       ipympl ipywidgets \
+    && python -m pip install --no-cache-dir \
+       "jupyter-ai==${JUPYTER_AI_VERSION}" jupyter_ai_acp_client==0.3.0 \
+    && npm install --global --allow-scripts=opencode-ai "opencode-ai@${OPENCODE_VERSION}" \
+    && opencode --version \
+    && conda clean --all -y \
+    && test ! -e /opt/conda/include/hdf5.h \
+    && chown -R training:training /opt/conda
+
+RUN conda install -y -c conda-forge cmake=3.30 \
+    && conda clean --all -y
+
+ENV HOME=/home/training
+USER training
+WORKDIR /home/training
+EXPOSE 8888

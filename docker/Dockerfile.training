@@ -1,0 +1,48 @@
+ARG TPL_IMAGE=ats-ecosim-training:tpls
+FROM ${TPL_IMAGE}
+
+ARG ATS_REF=agraus/ecosim_pk
+ARG ATS_COMMIT=
+ARG SOURCE_REPO=https://github.com/unknown/ats-ecosim-training
+LABEL org.opencontainers.image.source=${SOURCE_REPO}
+ENV ATS_SRC_DIR=/home/training/amanzi/src/physics/ats \
+    PATH=/home/training/install/bin:${PATH} \
+    LD_LIBRARY_PATH=/home/training/install/tpls/trilinos-15-1-0/lib:/home/training/install/tpls/ecosim/lib:${LD_LIBRARY_PATH} \
+    PYTHONPATH=/home/training/amanzi/src/physics/ats/tools/utils:/home/training/install/tpls/SEACAS/lib
+
+WORKDIR ${AMANZI_SRC_DIR}
+RUN git submodule update --init src/physics/ats \
+    && cd "${ATS_SRC_DIR}" \
+    && git fetch origin "${ATS_REF}" \
+    && git checkout --detach "${ATS_COMMIT:-FETCH_HEAD}" \
+    && git rev-parse HEAD
+
+WORKDIR ${AMANZI_SRC_DIR}
+ARG BUILD_JOBS=4
+RUN ./bootstrap.sh --opt --parallel="${BUILD_JOBS}" \
+    --prefix="${AMANZI_PREFIX}" \
+    --amanzi-build-dir=/home/training/build/ats \
+    --tpl-config-file="${AMANZI_TPLS_DIR}/share/cmake/amanzi-tpl-config.cmake" \
+    --with-mpi=/usr --enable-shared \
+    --disable-structured --enable-unstructured \
+    --enable-mesh_mstk --disable-mesh_moab \
+    --enable-hypre --disable-silo --disable-petsc \
+    --disable-amanzi_physics --enable-ats_physics \
+    --disable-geochemistry --disable-superlu \
+    --enable-clm --enable-ecosim --ats_dev \
+    --disable-build_user_guide \
+    && test -x "${AMANZI_PREFIX}/bin/ats" \
+    && rm -rf /home/training/build/ats
+
+RUN conda install -y -c conda-forge h5py netcdf4 \
+    && conda clean --all -y \
+    && python -c 'import h5py, netCDF4; print(h5py.version.info); print(netCDF4.__version__)'
+
+COPY --chown=training:training course /opt/ats-ecosim-training/course
+COPY --chown=training:training docker/start-jupyter.sh /usr/local/bin/start-ats-ecosim-training
+RUN mkdir -p /home/training/work
+USER root
+RUN chmod 755 /home/training
+USER training
+WORKDIR /home/training/work
+CMD ["/usr/local/bin/start-ats-ecosim-training"]
