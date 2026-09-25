@@ -38,8 +38,46 @@ RUN conda install -y -c conda-forge h5py netcdf4 \
     && conda clean --all -y \
     && python -c 'import h5py, netCDF4; print(h5py.version.info); print(netCDF4.__version__)'
 
+ARG ECOSIM_COMMIT=
+RUN set -eu; \
+    git clone --branch agraus/PrescribedPhenology \
+      https://github.com/jinyun1tang/EcoSIM.git /home/training/ecosim-source; \
+    if [ -n "${ECOSIM_COMMIT}" ]; then \
+      git -C /home/training/ecosim-source checkout --detach "${ECOSIM_COMMIT}"; \
+    fi; \
+    ecosim_rev="$(git -C /home/training/ecosim-source rev-parse HEAD)"; \
+    if [ -s "${AMANZI_TPLS_DIR}/ecosim/REVISION" ]; then \
+      test "${ecosim_rev}" = "$(cat "${AMANZI_TPLS_DIR}/ecosim/REVISION")"; \
+    fi; \
+    reference="/home/training/reference/ecosim/${ecosim_rev}"; \
+    mkdir -p "${reference}"; \
+    git -C /home/training/ecosim-source archive HEAD | tar -x -C "${reference}"; \
+    printf '%s\n' "${ecosim_rev}" > "${reference}/REVISION"; \
+    git -C /home/training/ecosim-source remote get-url origin > "${reference}/SOURCE_URL"; \
+    rm -rf /home/training/ecosim-source
+
 COPY --chown=training:training course /opt/ats-ecosim-training/course
 COPY --chown=training:training docker/start-jupyter.sh /usr/local/bin/start-ats-ecosim-training
+RUN set -eu; \
+    ats_rev="$(git -C "${ATS_SRC_DIR}" rev-parse HEAD)"; \
+    ats_reference="/opt/ats-ecosim-training/course/reference/ats/${ats_rev}"; \
+    mkdir -p "${ats_reference}" /opt/ats-ecosim-training/course/reference/ecosim; \
+    git -C "${ATS_SRC_DIR}" archive HEAD | tar -x -C "${ats_reference}"; \
+    printf '%s\n' "${ats_rev}" > "${ats_reference}/REVISION"; \
+    git -C "${ATS_SRC_DIR}" remote get-url origin > "${ats_reference}/SOURCE_URL"; \
+    cp -a /home/training/reference/ecosim/. /opt/ats-ecosim-training/course/reference/ecosim/; \
+    ecosim_rev="$(find /home/training/reference/ecosim -mindepth 1 -maxdepth 1 -type d -printf '%f\n')"; \
+    test -n "${ecosim_rev}"; \
+    if [ -s "${AMANZI_TPLS_DIR}/ecosim/REVISION" ]; then \
+      provenance='EcoSIM source revision matches the compiled library.'; \
+    else \
+      provenance='This prebuilt EcoSIM library has no recorded revision; its source match is unverified.'; \
+    fi; \
+    printf 'Source reference for this image:\n\n- ATS: `reference/ats/%s/`\n- EcoSIM: `reference/ecosim/%s/`\n\n%s\nEditing these source copies does not rebuild ATS.\n' \
+      "${ats_rev}" "${ecosim_rev}" "${provenance}" \
+      > /opt/ats-ecosim-training/course/reference/CURRENT.md; \
+    test -f "${ats_reference}/src/pks/ecosim/EcoSIM_ATS_interface.cc"; \
+    test -s "/opt/ats-ecosim-training/course/reference/ecosim/${ecosim_rev}/REVISION"
 RUN mkdir -p /home/training/work
 USER root
 RUN chmod 755 /home/training

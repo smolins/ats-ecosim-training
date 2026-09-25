@@ -16,6 +16,7 @@ jobs:
     outputs:
       amanzi: ${{ steps.refs.outputs.amanzi }}
       ats: ${{ steps.refs.outputs.ats }}
+      ecosim: ${{ steps.refs.outputs.ecosim }}
     steps:
       - id: refs
         shell: bash
@@ -23,10 +24,13 @@ jobs:
           set -euo pipefail
           amanzi=$(git ls-remote https://github.com/amanzi/amanzi.git refs/heads/master | awk '{print $1}')
           ats=$(git ls-remote https://github.com/amanzi/ats.git refs/heads/agraus/ecosim_pk | awk '{print $1}')
+          ecosim=$(git ls-remote https://github.com/jinyun1tang/EcoSIM.git refs/heads/agraus/PrescribedPhenology | awk '{print $1}')
           test -n "$amanzi"
           test -n "$ats"
+          test -n "$ecosim"
           echo "amanzi=$amanzi" >> "$GITHUB_OUTPUT"
           echo "ats=$ats" >> "$GITHUB_OUTPUT"
+          echo "ecosim=$ecosim" >> "$GITHUB_OUTPUT"
 
   build:
     needs: revisions
@@ -52,6 +56,7 @@ jobs:
         env:
           AMANZI_COMMIT: ${{ needs.revisions.outputs.amanzi }}
           ATS_COMMIT: ${{ needs.revisions.outputs.ats }}
+          ECOSIM_COMMIT: ${{ needs.revisions.outputs.ecosim }}
           ARCH: ${{ matrix.arch }}
         run: |
           set -euo pipefail
@@ -60,10 +65,12 @@ jobs:
           docker build -f docker/Dockerfile.tpls \
             --build-arg BASE_IMAGE=ats-ecosim-training:base \
             --build-arg AMANZI_COMMIT="$AMANZI_COMMIT" \
+            --build-arg ECOSIM_COMMIT="$ECOSIM_COMMIT" \
             -t ats-ecosim-training:tpls .
           docker build -f docker/Dockerfile.training \
             --build-arg TPL_IMAGE=ats-ecosim-training:tpls \
             --build-arg ATS_COMMIT="$ATS_COMMIT" \
+            --build-arg ECOSIM_COMMIT="$ECOSIM_COMMIT" \
             --build-arg SOURCE_REPO="https://github.com/${GITHUB_REPOSITORY}" \
             -t "${image}:sha-${GITHUB_SHA}-${ARCH}" .
           docker run --rm "${image}:sha-${GITHUB_SHA}-${ARCH}" \

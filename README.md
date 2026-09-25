@@ -49,17 +49,24 @@ launches OpenCode as an agent; a separate OpenCode server is unnecessary.
 OpenCode's config supports `{env:MY_ORG_API_KEY}` in the provider's `apiKey`
 field. The instructor will provide the endpoint and model definitions. The
 instructor config should include `"permission": {"edit": "ask", "bash": "ask"}`
-so file edits and shell commands request participant approval.
+so file edits and shell commands request participant approval. The workspace
+includes the ATS and EcoSIM source revisions selected for the image under
+`reference/`. `AGENTS.md` guides OpenCode to inspect those files and the lesson
+XML inputs when answering capability questions, with file citations. Editing
+the source copies does not rebuild ATS.
 
 ## Build locally
 
 `docker/build-local.sh` builds the base, Amanzi TPL, and ATS training layers
-for the host architecture. It resolves Amanzi `master` and ATS
-`agraus/ecosim_pk` to commit IDs at the start of the build and prints them.
-You can override them with `AMANZI_COMMIT` and `ATS_COMMIT` to repeat a build.
+for the host architecture. It resolves Amanzi `master`, ATS
+`agraus/ecosim_pk`, and EcoSIM `agraus/PrescribedPhenology` to commit IDs at
+the start of the build and prints them. You can override them with
+`AMANZI_COMMIT`, `ATS_COMMIT`, and `ECOSIM_COMMIT` to repeat a build.
 The build compiles scientific dependencies and may take considerable time.
 Local builds default to one compilation job to limit memory use; set
 `ATS_ECOSIM_BUILD_JOBS` if your Docker engine has more CPUs and RAM.
+A 2 GB Docker VM ran out of memory while compiling Trilinos even with one job;
+increase Docker's memory allocation before a clean local build.
 The TPL Dockerfile applies a small Amanzi build patch that sets
 `NETCDF_ENABLE_TESTS=OFF`. Python's HDF5 and NetCDF packages are installed after
 ATS is compiled, so the compiled libraries use Amanzi's HDF5 headers.

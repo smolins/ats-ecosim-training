@@ -18,7 +18,12 @@ RUN git clone https://github.com/amanzi/amanzi.git "${AMANZI_SRC_DIR}" \
 WORKDIR ${AMANZI_SRC_DIR}
 COPY docker/patches/amanzi-netcdf-no-tests.patch /tmp/amanzi-netcdf-no-tests.patch
 ARG BUILD_JOBS=4
+ARG ECOSIM_COMMIT=
 RUN git apply /tmp/amanzi-netcdf-no-tests.patch \
+    && if [ -n "${ECOSIM_COMMIT}" ]; then \
+         sed -i "s@^set(ECOSIM_GIT_TAG.*@set(ECOSIM_GIT_TAG        \"${ECOSIM_COMMIT}\")@" \
+           config/SuperBuild/TPLVersions.cmake; \
+       fi \
     && ./bootstrap.sh --opt --parallel="${BUILD_JOBS}" \
     --prefix="${AMANZI_PREFIX}" \
     --tpl-build-dir=/home/training/build/tpls \
@@ -32,4 +37,7 @@ RUN git apply /tmp/amanzi-netcdf-no-tests.patch \
     --enable-clm --enable-ecosim \
     --with-mpi=/usr --with-python=/opt/conda/bin/python \
     && test -f "${AMANZI_TPLS_DIR}/share/cmake/amanzi-tpl-config.cmake" \
+    && if [ -n "${ECOSIM_COMMIT}" ]; then \
+         printf '%s\n' "${ECOSIM_COMMIT}" > "${AMANZI_TPLS_DIR}/ecosim/REVISION"; \
+       fi \
     && rm -rf /home/training/build
