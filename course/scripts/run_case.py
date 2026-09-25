@@ -6,6 +6,7 @@ import argparse
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 
@@ -18,8 +19,25 @@ CASES = (
 )
 
 
+def _end_time(tree: ET.ElementTree, input_file: Path) -> tuple[ET.Element, Decimal]:
+    cycle = tree.getroot().find("./ParameterList[@name='cycle driver']")
+    if cycle is None:
+        raise ValueError(f"Missing cycle driver in {input_file}")
+    end_time = cycle.find("./Parameter[@name='end time']")
+    units = cycle.find("./Parameter[@name='end time units']")
+    if end_time is None or units is None or units.get("value") != "d":
+        raise ValueError(f"Expected an end time in days in {input_file}")
+    try:
+        value = Decimal(end_time.attrib["value"])
+    except (KeyError, InvalidOperation) as error:
+        raise ValueError(f"Invalid end time in {input_file}") from error
+    if not value.is_finite():
+        raise ValueError(f"Invalid end time in {input_file}")
+    return end_time, value
+
+
 def prepare_case(case: str, days: int = 30) -> Path:
-    """Create a fresh run directory beside the forcing data."""
+    """Prepare an input beside the forcing data without replacing existing edits."""
     if case not in CASES:
         raise ValueError(f"Unknown case: {case}")
     if days < 1 or days > 1826:
@@ -27,34 +45,29 @@ def prepare_case(case: str, days: int = 30) -> Path:
 
     run_dir = ROOT / f"{case}.demo"
     input_file = run_dir / f"{case}.xml"
-    if input_file.exists() and (run_dir / "duration_days.txt").exists():
+    if input_file.exists():
+        _, saved_days = _end_time(ET.parse(input_file), input_file)
+        if saved_days != days:
+            raise ValueError(
+                f"{input_file} has an end time of {saved_days} days, not {days}; "
+                "use that duration or move the existing run directory before preparing another"
+            )
         return run_dir
-    run_dir.mkdir(parents=True, exist_ok=True)
+    if run_dir.exists() and any(run_dir.iterdir()):
+        raise ValueError(f"{run_dir} contains files but no {input_file.name}; inspect it before preparing a case")
 
     source = ROOT / "inputs" / f"{case}.xml"
     tree = ET.parse(source)
-    cycle = tree.getroot().find("./ParameterList[@name='cycle driver']")
-    if cycle is None:
-        raise ValueError(f"Missing cycle driver in {source}")
-    end_time = cycle.find("./Parameter[@name='end time']")
-    units = cycle.find("./Parameter[@name='end time units']")
-    if end_time is None or units is None or units.get("value") != "d":
-        raise ValueError(f"Unexpected end time in {source}")
+    end_time, _ = _end_time(tree, source)
     end_time.set("value", str(days))
+    run_dir.mkdir(parents=True, exist_ok=True)
     tree.write(input_file, encoding="utf-8", xml_declaration=True)
-    (run_dir / "duration_days.txt").write_text(f"{days}\n")
     return run_dir
 
 
 def run_case(case: str, days: int = 30) -> Path:
     """Run ATS once and return the directory containing results."""
     run_dir = prepare_case(case, days)
-    saved_days = int((run_dir / "duration_days.txt").read_text().strip())
-    if saved_days != days:
-        raise ValueError(
-            f"{run_dir} was prepared for {saved_days} days; use that duration or "
-            "remove the run directory before preparing a new one"
-        )
     if (run_dir / ".ats-complete").exists():
         return run_dir
     if (run_dir / "surf_prop.dat").exists():

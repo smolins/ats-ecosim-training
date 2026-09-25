@@ -74,7 +74,7 @@ jobs:
             --build-arg SOURCE_REPO="https://github.com/${GITHUB_REPOSITORY}" \
             -t "${image}:sha-${GITHUB_SHA}-${ARCH}" .
           docker run --rm "${image}:sha-${GITHUB_SHA}-${ARCH}" \
-            bash -lc 'command -v ats && command -v jupyter && command -v opencode'
+            bash -lc 'command -v ats && command -v jupyter && opencode --version && python -c "from importlib.metadata import entry_points; assert any(ep.name == \"opencode-acp\" for ep in entry_points(group=\"jupyter_ai.personas\"))" && jupyter server extension list && jupyter labextension list'
           docker run --rm "${image}:sha-${GITHUB_SHA}-${ARCH}" \
             bash -lc 'cd /opt/ats-ecosim-training/course && python scripts/run_case.py snow_dynamics_albedo_internal --days 1'
           docker push "${image}:sha-${GITHUB_SHA}-${ARCH}"
@@ -98,8 +98,13 @@ jobs:
           tags=(-t "${image}:sha-${GITHUB_SHA}")
           if [[ "$GITHUB_REF_TYPE" == tag ]]; then
             tags+=(-t "${image}:${GITHUB_REF_NAME}" -t "${image}:latest")
+          elif [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_REF" == refs/heads/main ]]; then
+            tags+=(-t "${image}:latest")
           fi
           docker buildx imagetools create "${tags[@]}" \
             "${image}:sha-${GITHUB_SHA}-amd64" \
             "${image}:sha-${GITHUB_SHA}-arm64"
           docker buildx imagetools inspect "${image}:sha-${GITHUB_SHA}"
+          if [[ "$GITHUB_REF_TYPE" == tag || ( "$GITHUB_EVENT_NAME" == workflow_dispatch && "$GITHUB_REF" == refs/heads/main ) ]]; then
+            docker buildx imagetools inspect "${image}:latest"
+          fi

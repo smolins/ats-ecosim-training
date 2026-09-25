@@ -11,10 +11,22 @@ The provided inputs normally run for 1,826 days. The course helper copies an
 input into a separate `.demo` directory and reduces it to 30 days by default.
 Forcing files stay beside those run directories under `examples/ecosim/data`.
 Simulation output is written to the mounted workspace and is excluded from Git.
+The repository's `course/` directory holds templates. The launcher copies them
+into the host's `work/` directory on first launch; that editable directory is
+`/home/training/work` in JupyterLab. The launcher prints both host paths. A
+custom `ATS_ECOSIM_WORKSPACE` replaces host `work/`, and existing edits are
+preserved on later launches.
 
-The Jupyter AI sidebar should show `@OpenCode`. To use it, mount the instructor's
-`opencode.json` and provide the API key environment variable described in the
-top-level README. The lessons also work without an API key.
+These single-column exercises are supported with one MPI rank. Run them with
+`ats input.xml` or `mpirun -np 1 ats input.xml`; the current mesh fails when
+partitioned across two ranks.
+
+To use OpenCode, open a Jupyter AI chat and choose it from the chat input's
+persona picker. Its model menu appears after the agent initializes. OpenCode
+should appear without `opencode.json`; in a JupyterLab terminal, `opencode models`
+lists its default model catalog. To use instructor models, mount their config
+and provide the API key environment variable described in the top-level README.
+The lessons also work without an API key.
 For capability questions, the assistant can read the ATS and EcoSIM source
 included with the image under `reference/`. Start with
 `reference/CURRENT.md`; `AGENTS.md` tells the agent how to cite the code.
