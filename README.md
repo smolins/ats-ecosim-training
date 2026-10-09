@@ -18,7 +18,8 @@ export ATS_ECOSIM_IMAGE=ghcr.io/smolins/ats-ecosim-training:latest
 ```
 
 Open the localhost URL printed by JupyterLab, including its login token. The
-script binds port 8888 to `127.0.0.1`. It prints the absolute host paths for
+script binds the first free port from 8888 upward to `127.0.0.1` and prints the
+chosen port. It also prints the absolute host paths for
 the course templates and your editable workspace before starting Docker:
 
 | Location | Purpose |
@@ -31,7 +32,8 @@ The first launch copies course files into `work/`; later launches preserve your
 edits and results. Set `ATS_ECOSIM_WORKSPACE` to use a different host folder.
 Open `01_setup.ipynb` first.
 
-To use a different workspace or host port:
+To use a different workspace or a fixed host port (the script stops if that
+port is busy):
 
 ```bash
 ATS_ECOSIM_WORKSPACE="$HOME/my-ecosim-work" ATS_ECOSIM_PORT=8899 ./run-training.sh
@@ -115,9 +117,18 @@ the quick-start pull command. The workflow uses
 participants to pull it without signing in. Docker chooses the matching
 architecture automatically from the combined tag.
 
+CI builds the three layers with `docker buildx bake -f docker/docker-bake.hcl`
+and stores layer caches as `buildcache-<layer>-<arch>` tags in the same GHCR
+package. A rebuild reuses the compiled TPLs and ATS while the Amanzi, ATS, and
+EcoSIM branch heads are unchanged; when a branch moves, the build restarts
+from the first layer that depends on it.
+
 ## Troubleshooting
 
-- If port 8888 is occupied, set `ATS_ECOSIM_PORT=8899`.
+- The launcher picks a free host port automatically. If you set
+  `ATS_ECOSIM_PORT` and that port is occupied, choose another or unset it.
+  The Jupyter MCP server used by OpenCode listens on port 3001 inside the
+  container only; it is not published and cannot conflict with host ports.
 - If `ats` is missing, confirm you pulled the training image and set
   `ATS_ECOSIM_IMAGE` to its complete tag.
 - If OpenCode is missing from the chat persona picker, check that you pulled
@@ -125,6 +136,14 @@ architecture automatically from the combined tag.
   errors. In a JupyterLab terminal, check `opencode --version`,
   `jupyter server extension list`, and `jupyter labextension list`. The model
   picker only appears after a persona starts.
+- If the log shows `opencode --version command timed out`, OpenCode started
+  too slowly for Jupyter AI's check. Pull the newest image, which allows a
+  longer startup. Confirm that
+  `docker image inspect --format '{{.Architecture}}' "$ATS_ECOSIM_IMAGE"`
+  matches your machine (`arm64` on Apple Silicon); an emulated `amd64` image
+  starts much more slowly. Giving Docker Desktop more CPUs and memory and
+  restarting the container also helps. The launcher logs a note when OpenCode
+  takes more than 5 s to start.
 - If OpenCode appears but cannot call the model, confirm the config path,
   environment variable name, key, model, and endpoint with the instructor.
 - If a simulation fails, inspect its `ats.log` in the corresponding `.demo`

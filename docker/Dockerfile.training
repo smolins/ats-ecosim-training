@@ -78,6 +78,12 @@ RUN set -eu; \
       > /opt/ats-ecosim-training/course/reference/CURRENT.md; \
     test -f "${ats_reference}/src/pks/ecosim/EcoSIM_ATS_interface.cc"; \
     test -s "/opt/ats-ecosim-training/course/reference/ecosim/${ecosim_rev}/REVISION"
+# jupyter_ai_acp_client 0.3.0 gives `opencode --version` only 5 s, which a cold
+# start of the 185 MB binary can exceed on slow or emulated Docker hosts.
+RUN set -eu; \
+    f="$(python -c 'import jupyter_ai_acp_client.acp_personas.opencode as m; print(m.__file__)')"; \
+    sed -i 's/timeout=5,/timeout=60,/' "$f"; \
+    grep -q 'timeout=60,' "$f"
 RUN mkdir -p /home/training/work
 USER root
 RUN chmod 755 /home/training
